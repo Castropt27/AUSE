@@ -11,9 +11,11 @@ NUM_COLS = [
     "screen_time_hours",
     "work_screen_hours",
     "leisure_screen_hours",
+    "sleep_hours",  
     "productivity_0_100",
     "mental_wellness_index_0_100",
 ]
+
 CAT_COLS = ["gender", "occupation", "work_mode"]
 
 RANGE_CHECKS = {
@@ -82,13 +84,17 @@ def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     if {"work_screen_hours", "leisure_screen_hours"}.issubset(df.columns):
         denom2 = df["leisure_screen_hours"].replace(0, np.nan)
         df["work_leisure_ratio"] = (df["work_screen_hours"] / denom2).replace([np.inf, -np.inf], np.nan).fillna(0)
+    if {"work_screen_hours", "screen_time_hours"}.issubset(df.columns):
+        denom = df["screen_time_hours"].replace(0, np.nan)
+        df["work_screen_ratio"] = (df["work_screen_hours"] / denom).fillna(0).clip(0, 1)
     return df
 
 def _one_hot_encode(df: pd.DataFrame) -> pd.DataFrame:
     cats = [c for c in CAT_COLS if c in df.columns]
     if not cats:
         return df
-    dummies = pd.get_dummies(df[cats], drop_first=True, dtype=int)
+    dummies = pd.get_dummies(df[cats], drop_first=False, dtype=int)
+
     df = pd.concat([df.drop(columns=cats), dummies], axis=1)
     return df
 
@@ -100,14 +106,15 @@ def load_and_clean_data(save_clean_csv: bool = True) -> pd.DataFrame:
 
     # remover colunas que decidiste NÃO usar
     df.drop(columns=[
-        "exercise_minutes_per_week",
-        "sleep_hours",
-        "stress_level_0_10",
-        "sleep_quality_1_5",
-        "user_id",
-        "totalscreentime",
-        "total_screen_time"
-    ], inplace=True, errors="ignore")
+    "exercise_minutes_per_week",
+    "stress_level_0_10",
+    "social_hours_per_week",
+    "sleep_quality_1_5",
+    "user_id",
+    "totalscreentime",
+    "total_screen_time"
+], inplace=True, errors="ignore")
+    
 
     df = _coerce_numeric(df)
     df = _handle_missing(df)
