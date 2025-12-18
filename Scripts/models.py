@@ -16,7 +16,19 @@ from sklearn.metrics import (
     silhouette_score,
     davies_bouldin_score,
     calinski_harabasz_score,
+    roc_auc_score,
+    cohen_kappa_score,
 )
+from sklearn.preprocessing import label_binarize
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.ensemble import GradientBoostingRegressor, GradientBoostingClassifier
+from sklearn.neural_network import MLPRegressor, MLPClassifier
+from sklearn.linear_model import BayesianRidge
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVR, SVC
+from sklearn.pipeline import make_pipeline
+from sklearn.exceptions import ConvergenceWarning
+import warnings
 import pandas as pd
 
 RANDOM_STATE = 42
@@ -25,6 +37,9 @@ def run_models(df):
     run_regression_productivity(df)
     run_classification_productivity(df)
     run_clustering(df)
+    # modelos adicionais solicitados
+    run_additional_regression_models(df)
+    run_additional_classification_models(df)
 
 def _features_targets(df):
     base_feats = [
@@ -109,6 +124,35 @@ def run_classification_productivity(df):
 
     y_pred = clf.predict(X_test)
 
+    # AUC (one-vs-rest, macro)
+    try:
+        if hasattr(clf, "predict_proba"):
+            y_score = clf.predict_proba(X_test)
+        elif hasattr(clf, "decision_function"):
+            dec = clf.decision_function(X_test)
+            # decision_function may return shape (n_samples,) for binary
+            if dec.ndim == 1:
+                y_score = np.vstack([1 - (1 / (1 + np.exp(dec))), 1 / (1 + np.exp(dec))]).T
+            else:
+                y_score = dec
+        else:
+            y_score = None
+
+        if y_score is not None:
+            classes = sorted(list(y_test.unique()))
+            y_test_b = label_binarize(y_test, classes=classes)
+            # If binary, ensure shape matches
+            if y_test_b.shape[1] == 1 and y_score.ndim == 2 and y_score.shape[1] == 2:
+                pass
+            auc = roc_auc_score(y_test_b, y_score, average="macro", multi_class="ovr")
+        else:
+            auc = float("nan")
+    except Exception:
+        auc = float("nan")
+
+    # Cohen's Kappa
+    kappa = cohen_kappa_score(y_test, y_pred)
+
     acc = accuracy_score(y_test, y_pred)
     macro_f1 = f1_score(y_test, y_pred, average="macro")
     macro_precision = precision_score(y_test, y_pred, average="macro", zero_division=0)
@@ -116,9 +160,9 @@ def run_classification_productivity(df):
     mcc = matthews_corrcoef(y_test, y_pred)
 
     print("\n2. CLASSIFICAÇÃO (Productivity: low/medium/high por quantis)")
-    print(f"{'Modelo':<25} {'Acc':>8} {'F1':>8} {'Recall':>8} {'Prec':>8} {'MCC':>8}")
+    print(f"{'Modelo':<25} {'Acc':>8} {'F1':>8} {'AUC':>8} {'Kappa':>8} {'Recall':>8} {'Prec':>8} {'MCC':>8}")
     print("-" * 70)
-    print(f"{'RandomForestClassifier':<25} {acc:8.3f} {macro_f1:8.3f} {macro_recall:8.3f} {macro_precision:8.3f} {mcc:8.3f}")
+    print(f"{'RandomForestClassifier':<25} {acc:8.3f} {macro_f1:8.3f} {auc:8.3f} {kappa:8.3f} {macro_recall:8.3f} {macro_precision:8.3f} {mcc:8.3f}")
 
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred, zero_division=0))
@@ -170,6 +214,101 @@ def run_clustering(df):
 
     print("\nCentroides para k=3 (escala original):")
     print(centroids.round(2))
+
+
+# 4) Modelos adicionais — regressão
+def run_additional_regression_models(df):
+    X, y, feats = _features_targets(df)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE
+    )
+
+    regressors = [
+        ("DecisionTree", DecisionTreeRegressor(random_state=RANDOM_STATE)),
+        ("GradientBoosting", GradientBoostingRegressor(random_state=RANDOM_STATE, n_estimators=200)),
+        ("MLPRegressor", make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(100,50), max_iter=1000, random_state=RANDOM_STATE))),
+        ("BayesianRidge", BayesianRidge()),
+        ("SVR", make_pipeline(StandardScaler(), SVR())),
+    ]
+
+    print("\n4. REGRESSÃO (Modelos adicionais)")
+    print(f"{'Modelo':<25} {'MAE':>8} {'RMSE':>8} {'R2':>8}")
+    print("-" * 50)
+
+    for name, model in regressors:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ConvergenceWarning)
+            model.fit(X_train, y_train)
+
+        y_pred = model.predict(X_test)
+        mse = mean_squared_error(y_test, y_pred)
+        rmse = mse ** 0.5
+        mae = mean_absolute_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+
+        print(f"{name:<25} {mae:8.3f} {rmse:8.3f} {r2:8.3f}")
+
+
+# 5) Modelos adicionais — classificação
+def run_additional_classification_models(df):
+    X, y_cont, feats = _features_targets(df)
+    y = pd.qcut(y_cont, q=3, labels=["low", "medium", "high"], duplicates="drop")
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=RANDOM_STATE
+    )
+
+    classifiers = [
+        ("DecisionTree", DecisionTreeClassifier(random_state=RANDOM_STATE)),
+        ("GradientBoosting", GradientBoostingClassifier(random_state=RANDOM_STATE, n_estimators=200)),
+        ("MLPClassifier", make_pipeline(StandardScaler(), MLPClassifier(hidden_layer_sizes=(100,50), max_iter=1000, random_state=RANDOM_STATE))),
+        ("GaussianNB", GaussianNB()),
+        ("SVC", make_pipeline(StandardScaler(), SVC(probability=True))),
+    ]
+
+    print("\n5. CLASSIFICAÇÃO (Modelos adicionais)")
+    print(f"{'Modelo':<25} {'Acc':>8} {'F1':>8} {'AUC':>8} {'Kappa':>8} {'Recall':>8} {'Prec':>8} {'MCC':>8}")
+    print("-" * 70)
+
+    for name, clf in classifiers:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ConvergenceWarning)
+            clf.fit(X_train, y_train)
+
+        y_pred = clf.predict(X_test)
+
+        # AUC (one-vs-rest, macro)
+        try:
+            if hasattr(clf, "predict_proba"):
+                y_score = clf.predict_proba(X_test)
+            elif hasattr(clf, "decision_function"):
+                dec = clf.decision_function(X_test)
+                if dec.ndim == 1:
+                    y_score = np.vstack([1 - (1 / (1 + np.exp(dec))), 1 / (1 + np.exp(dec))]).T
+                else:
+                    y_score = dec
+            else:
+                y_score = None
+
+            if y_score is not None:
+                classes = sorted(list(y_test.unique()))
+                y_test_b = label_binarize(y_test, classes=classes)
+                auc = roc_auc_score(y_test_b, y_score, average="macro", multi_class="ovr")
+            else:
+                auc = float("nan")
+        except Exception:
+            auc = float("nan")
+
+        acc = accuracy_score(y_test, y_pred)
+        macro_f1 = f1_score(y_test, y_pred, average="macro")
+        macro_precision = precision_score(y_test, y_pred, average="macro", zero_division=0)
+        macro_recall = recall_score(y_test, y_pred, average="macro", zero_division=0)
+        mcc = matthews_corrcoef(y_test, y_pred)
+        kappa = cohen_kappa_score(y_test, y_pred)
+
+        print(f"{name:<25} {acc:8.3f} {macro_f1:8.3f} {auc:8.3f} {kappa:8.3f} {macro_recall:8.3f} {macro_precision:8.3f} {mcc:8.3f}")
+
 
     feats = [c for c in ["screen_time_hours","work_screen_hours","leisure_screen_hours"] if c in df.columns]
     if len(feats) < 2:
