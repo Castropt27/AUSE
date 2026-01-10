@@ -1,4 +1,4 @@
 cluster_profile,n_users,productivity_mean,screen_time_mean
-high,122,44.498,11.258
-low,122,64.103,6.538
-medium,123,52.734,9.037
+0,78,48.687,10.178
+1,154,61.747,6.977
+2,135,47.621,10.477
