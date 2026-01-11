@@ -1,5 +1,5 @@
-from scripts.data_cleaning import load_and_clean_data
-from scripts.models import run_models
+from Scripts.data_cleaning import load_and_clean_data
+from Scripts.models import run_models
 
 def main():
     print("=== INICIANDO PROJETO AASE ===")
