@@ -30,6 +30,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.exceptions import ConvergenceWarning
 import warnings
 import pandas as pd
+import joblib
+from pathlib import Path
 
 RANDOM_STATE = 42
 def run_models(df):
@@ -100,6 +102,13 @@ def run_regression_productivity(df):
     )
     cv_rmse = (-cv_scores) ** 0.5
     print(f"\nCV RMSE (média ± sd): {cv_rmse.mean():.4f} ± {cv_rmse.std():.4f}")
+
+    # Save best regression model
+    model_dir = Path(__file__).resolve().parents[1] / "models"
+    model_dir.mkdir(exist_ok=True)
+    model_path = model_dir / "best_regression_model.joblib"
+    joblib.dump(model, model_path)
+    print(f"Modelo de regressão salvo em: {model_path}")
 
 # 2) Classificação — produtividade em 3 níveis (quantis)
 def run_classification_productivity(df):
@@ -174,6 +183,13 @@ def run_classification_productivity(df):
     cv_acc = cross_val_score(clf, X, y, scoring="accuracy", cv=5, n_jobs=-1)
     print(f"\nCV Accuracy (média ± sd): {cv_acc.mean():.4f} ± {cv_acc.std():.4f}")
 
+    # Save best classification model
+    model_dir = Path(__file__).resolve().parents[1] / "models"
+    model_dir.mkdir(exist_ok=True)
+    model_path = model_dir / "best_classification_model.joblib"
+    joblib.dump(clf, model_path)
+    print(f"Modelo de classificação salvo em: {model_path}")
+
 # 3) Clustering — perfis de hábitos digitais
 def run_clustering(df):
     feats = [c for c in ["screen_time_hours","work_screen_hours","leisure_screen_hours"] if c in df.columns]
@@ -214,6 +230,16 @@ def run_clustering(df):
 
     print("\nCentroides para k=3 (escala original):")
     print(centroids.round(2))
+
+    # Save best clustering model and scaler
+    model_dir = Path(__file__).resolve().parents[1] / "models"
+    model_dir.mkdir(exist_ok=True)
+    model_path = model_dir / "best_clustering_model.joblib"
+    scaler_path = model_dir / "clustering_scaler.joblib"
+    joblib.dump(kmeans, model_path)
+    joblib.dump(scaler, scaler_path)
+    print(f"Modelo de clustering salvo em: {model_path}")
+    print(f"Scaler de clustering salvo em: {scaler_path}")
 
 
 # 4) Modelos adicionais — regressão
