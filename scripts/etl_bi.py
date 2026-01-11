@@ -251,35 +251,29 @@ def apply_model_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def export_bi_users(df: pd.DataFrame, out_dir: Path) -> Path:
-    cols = [
-        "user_id",
-        "age",
-        "age_group",
-        "screen_time_hours",
-        "screen_time_bucket",
-        "work_screen_hours",
-        "leisure_screen_hours",
-        "work_screen_ratio",
-        "work_leisure_ratio",
-        "is_outlier_screen_time",
-        "productivity_0_100",
-        "productivity_bucket",
+    # Preserve all original columns, but ensure prediction columns appear at the end
+    pred_cols = [
         "pred_productivity_reg",
         "confidence_reg",
         "pred_productivity_class",
         "confidence_class",
-        "mental_wellness_index_0_100",
-        "work_mode",
-        "gender",
-        "occupation",
-        "sleep_hours",
-        "stress_level_0_10",
         "cluster_profile",
-        "missing_count",
     ]
 
-    present = [c for c in cols if c in df.columns]
-    bi_users = df[present].copy()
+    # Start with the current DataFrame columns (preserves original order)
+    cols = list(df.columns)
+
+    # Remove any prediction columns that appear earlier so we can append them at the end
+    for p in pred_cols:
+        if p in cols:
+            cols.remove(p)
+
+    # Append prediction columns in a fixed order if they exist in the DataFrame
+    for p in pred_cols:
+        if p in df.columns:
+            cols.append(p)
+
+    bi_users = df[cols].copy()
     out_path = out_dir / "bi_users.csv"
     bi_users.to_csv(out_path, index=False)
     logging.info(f"Wrote user-level BI dataset: {out_path} ({len(bi_users)} rows)")
